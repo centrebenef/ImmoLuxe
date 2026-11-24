@@ -1,0 +1,6 @@
+{
+  "name": "ImmoLuxe",
+  "description": "Dashboard immobilier SaaS moderne pour ImmoLuxe : gestion de villas, appartements, studios et terrains, suivi des ventes, clients, agents et rapports financiers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
