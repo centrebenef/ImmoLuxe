@@ -47,11 +47,12 @@ interface SessionPayload {
   exp: number;
 }
 
-function hashPassword(password: string, saltHex?: string): { salt: string; hash: string } {
-  const salt = saltHex ?? crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
-  return { salt, hash: derived };
-}
+// Salted scrypt credential for the sole authorized administrator ('immo')
+const FIXED_ADMIN_RECORD: AdminCredentialRecord = {
+  username: 'immo',
+  salt: '9ddb892f1c0ff708d9782e51031979ef',
+  hash: 'a0edf6edb43ebcc56dad406255d18edd26b2537a464907d611a22dd8429738c15331e92417d58c3ad903a81b29d417dbb257febba112d8bb31622fb8b724848e',
+};
 
 function verifyPassword(password: string, salt: string, expectedHashHex: string): boolean {
   const derived = crypto.scryptSync(password, salt, 64);
@@ -65,21 +66,6 @@ function constantTimeStringMatch(a: string, b: string): boolean {
   const bufB = Buffer.from(b, 'utf8');
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
-}
-
-function getEnvCredential(): AdminCredentialRecord | null {
-  const envPass = process.env.ADMIN_PASSWORD?.trim();
-  if (!envPass) return null;
-  const envUser = process.env.ADMIN_USERNAME?.trim() || 'immo';
-  const { salt, hash } = hashPassword(envPass);
-  return { username: envUser, salt, hash };
-}
-
-const envAdminRecord = getEnvCredential();
-let claimedAdminRecord: AdminCredentialRecord | null = null;
-
-function getActiveAdminRecord(): AdminCredentialRecord | null {
-  return envAdminRecord ?? claimedAdminRecord;
 }
 
 const revokedSessionIds = new Set<string>();
@@ -112,6 +98,7 @@ function verifySessionToken(token: string): SessionPayload | null {
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as SessionPayload;
     if (!parsed.sub || !parsed.jti || typeof parsed.exp !== 'number') return null;
+    if (!constantTimeStringMatch(parsed.sub, FIXED_ADMIN_RECORD.username)) return null;
     if (Date.now() > parsed.exp) return null;
     if (revokedSessionIds.has(parsed.jti)) return null;
     return parsed;
@@ -172,42 +159,12 @@ export function registerApiRoutes(app: express.Express): void {
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/auth/status', (_req: Request, res: Response) => {
-    const active = getActiveAdminRecord();
-    res.json({
-      configured: active !== null,
-      defaultUsername: process.env.ADMIN_USERNAME?.trim() || 'immo',
-    });
+    res.json({ configured: true });
   });
 
-  app.post('/api/auth/setup', (req: Request, res: Response) => {
-    if (getActiveAdminRecord() !== null) {
-      res.status(409).json({
-        error: 'Le compte administrateur est déjà configuré.',
-      });
-      return;
-    }
-
-    const { username, password } = req.body ?? {};
-    if (
-      !isNonEmptyString(username, 64) ||
-      typeof password !== 'string' ||
-      password.length < 4 ||
-      password.length > 128
-    ) {
-      res.status(400).json({
-        error: 'Veuillez saisir un identifiant valide et un mot de passe d’au moins 4 caractères.',
-      });
-      return;
-    }
-
-    const cleanUser = username.trim();
-    const { salt, hash } = hashPassword(password);
-    claimedAdminRecord = { username: cleanUser, salt, hash };
-
-    const token = createSessionToken(cleanUser);
-    res.status(201).json({
-      token,
-      admin: { username: cleanUser },
+  app.all('/api/auth/setup', (_req: Request, res: Response) => {
+    res.status(403).json({
+      error: 'Création ou modification de compte désactivée. Accès réservé uniquement à l’administrateur.',
     });
   });
 
@@ -220,32 +177,30 @@ export function registerApiRoutes(app: express.Express): void {
       return;
     }
 
-    const active = getActiveAdminRecord();
-    if (!active) {
-      res.status(409).json({
-        error: 'Aucun administrateur configuré. Veuillez initialiser le compte.',
-      });
-      return;
-    }
-
     const { username, password } = req.body ?? {};
     if (typeof username !== 'string' || typeof password !== 'string') {
       res.status(400).json({ error: 'Identifiant et mot de passe requis.' });
       return;
     }
 
-    const userMatch = constantTimeStringMatch(username.trim(), active.username);
-    const passMatch = verifyPassword(password, active.salt, active.hash);
+    const userMatch = constantTimeStringMatch(username.trim(), FIXED_ADMIN_RECORD.username);
+    const passMatch = verifyPassword(
+      password,
+      FIXED_ADMIN_RECORD.salt,
+      FIXED_ADMIN_RECORD.hash
+    );
 
     if (!userMatch || !passMatch) {
-      res.status(401).json({ error: 'Identifiant ou mot de passe incorrect.' });
+      res.status(401).json({
+        error: 'Identifiant ou mot de passe incorrect. Accès strictement réservé à l’administrateur.',
+      });
       return;
     }
 
-    const token = createSessionToken(active.username);
+    const token = createSessionToken(FIXED_ADMIN_RECORD.username);
     res.json({
       token,
-      admin: { username: active.username },
+      admin: { username: FIXED_ADMIN_RECORD.username },
     });
   });
 

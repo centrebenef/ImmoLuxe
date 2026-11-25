@@ -2,17 +2,11 @@ import { useState } from 'react';
 import { Eye, EyeOff, Lock, ShieldCheck, User } from 'lucide-react';
 
 interface AdminAuthScreenProps {
-  configured: boolean;
-  defaultUsername: string;
   onAuthenticated: (token: string, username: string) => void;
 }
 
-export function AdminAuthScreen({
-  configured,
-  defaultUsername,
-  onAuthenticated,
-}: AdminAuthScreenProps) {
-  const [username, setUsername] = useState(defaultUsername || 'immo');
+export function AdminAuthScreen({ onAuthenticated }: AdminAuthScreenProps) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +18,7 @@ export function AdminAuthScreen({
     setSubmitting(true);
 
     try {
-      const endpoint = configured ? '/api/auth/login' : '/api/auth/setup';
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -41,7 +34,7 @@ export function AdminAuthScreen({
       };
 
       if (!response.ok || !data.token || !data.admin) {
-        setError(data.error || 'Échec de l’authentification.');
+        setError(data.error || 'Identifiant ou mot de passe incorrect.');
         return;
       }
 
@@ -77,19 +70,13 @@ export function AdminAuthScreen({
           <div>
             <div className="flex items-center gap-2 text-xs font-medium text-[#9A7524] mb-1">
               <ShieldCheck className="h-4 w-4" />
-              <span>
-                {configured
-                  ? 'Accès administrateur protégé'
-                  : 'Configuration initiale du compte administrateur'}
-              </span>
+              <span>Accès administrateur exclusif</span>
             </div>
             <h2 className="font-display text-xl font-bold text-[#0B1F3A]">
-              {configured ? 'Connexion administrateur' : 'Définir l’accès administrateur'}
+              Connexion administrateur
             </h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              {configured
-                ? 'Saisissez votre identifiant et votre mot de passe pour gérer les biens, ventes, clients et conseillers.'
-                : 'Créez le mot de passe administrateur pour sécuriser l’accès au tableau de bord (pensez à configurer ADMIN_PASSWORD dans les secrets avant le partage).'}
+              Cet espace est strictement réservé à l’administrateur autorisé du projet ImmoLuxe.
             </p>
           </div>
 
@@ -119,7 +106,7 @@ export function AdminAuthScreen({
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="immo"
+                  placeholder="Identifiant"
                   className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2.5 text-sm text-[#0B1F3A] focus:outline-none focus:ring-2 focus:ring-[#C9A24D]"
                 />
               </div>
@@ -138,8 +125,7 @@ export function AdminAuthScreen({
                   id="admin-password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  minLength={4}
-                  autoComplete={configured ? 'current-password' : 'new-password'}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -170,11 +156,7 @@ export function AdminAuthScreen({
             disabled={submitting}
             className="w-full py-2.5 px-4 rounded-lg bg-[#0B1F3A] text-white text-sm font-semibold hover:bg-[#132F54] disabled:opacity-60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A24D]"
           >
-            {submitting
-              ? 'Vérification...'
-              : configured
-                ? 'Se connecter'
-                : 'Activer et accéder au dashboard'}
+            {submitting ? 'Vérification...' : 'Se connecter'}
           </button>
         </form>
       </div>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="immo-navy" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#132F54" />
+      <stop offset="100%" stop-color="#0B1F3A" />
+    </linearGradient>
+    <linearGradient id="immo-gold" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E6C574" />
+      <stop offset="100%" stop-color="#C9A24D" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#immo-navy)" />
+  <rect x="2.5" y="2.5" width="59" height="59" rx="11.5" stroke="#C9A24D" stroke-opacity="0.45" stroke-width="1.5" />
+  <!-- Modern luxury architectural roofline & residence silhouette -->
+  <path
+    d="M12 31L32 15L52 31"
+    stroke="url(#immo-gold)"
+    stroke-width="4.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M18 29V49H46V29"
+    stroke="#FFFFFF"
+    stroke-width="3.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Architectural doorway & penthouse window accent -->
+  <rect x="27.5" y="36" width="9" height="13" rx="1.5" fill="url(#immo-gold)" />
+  <rect x="28.5" y="24" width="7" height="5.5" rx="1" fill="#E6C574" fill-opacity="0.9" />
+</svg>

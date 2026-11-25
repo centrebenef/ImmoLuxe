@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  INITIAL_AGENTS,
-  INITIAL_CLIENTS,
-  INITIAL_PROPERTIES,
-  INITIAL_SETTINGS,
-  INITIAL_TRANSACTIONS,
-} from './data/mockData';
+import { INITIAL_SETTINGS } from './data/mockData';
 import {
   AgencySettings,
   Agent,
@@ -43,29 +37,18 @@ type DeleteTarget =
   | { kind: 'all' }
   | null;
 
-interface AuthStatus {
-  loading: boolean;
-  configured: boolean;
-  defaultUsername: string;
-}
-
 export default function App() {
   // In-memory Bearer session token (never stored in localStorage/sessionStorage)
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [adminUsername, setAdminUsername] = useState<string>('immo');
-  const [authStatus, setAuthStatus] = useState<AuthStatus>({
-    loading: true,
-    configured: true,
-    defaultUsername: 'immo',
-  });
+  const [adminUsername, setAdminUsername] = useState<string>('');
 
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [properties, setProperties] = useState<Property[]>(INITIAL_PROPERTIES);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
-  const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [settings, setSettings] = useState<AgencySettings>(INITIAL_SETTINGS);
   const [dataLoading, setDataLoading] = useState(false);
 
@@ -85,31 +68,6 @@ export default function App() {
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
 
-  const fetchAuthStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/status');
-      if (res.ok) {
-        const data = (await res.json()) as {
-          configured: boolean;
-          defaultUsername: string;
-        };
-        setAuthStatus({
-          loading: false,
-          configured: data.configured,
-          defaultUsername: data.defaultUsername || 'immo',
-        });
-        return;
-      }
-    } catch {
-      // Fallback handled below
-    }
-    setAuthStatus({ loading: false, configured: false, defaultUsername: 'immo' });
-  }, []);
-
-  useEffect(() => {
-    void fetchAuthStatus();
-  }, [fetchAuthStatus]);
-
   const authFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
       if (!authToken) throw new Error('Non authentifié');
@@ -121,12 +79,12 @@ export default function App() {
       const res = await fetch(url, { ...options, headers });
       if (res.status === 401) {
         setAuthToken(null);
-        void fetchAuthStatus();
+        setAdminUsername('');
         throw new Error('Session expirée');
       }
       return res;
     },
-    [authToken, fetchAuthStatus]
+    [authToken]
   );
 
   // Load protected dashboard data once authenticated
@@ -159,7 +117,6 @@ export default function App() {
   const handleAuthenticated = (token: string, username: string) => {
     setAuthToken(token);
     setAdminUsername(username);
-    setAuthStatus((prev) => ({ ...prev, configured: true }));
   };
 
   const handleLogout = async () => {
@@ -171,9 +128,13 @@ export default function App() {
       // Clear local memory token regardless
     } finally {
       setAuthToken(null);
+      setAdminUsername('');
+      setProperties([]);
+      setTransactions([]);
+      setClients([]);
+      setAgents([]);
       setSelectedProperty(null);
       setActiveSection('dashboard');
-      void fetchAuthStatus();
     }
   };
 
@@ -457,27 +418,8 @@ export default function App() {
     }
   })();
 
-  if (authStatus.loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#0B1F3A] text-[#C9A24D] font-display font-bold">
-            IL
-          </div>
-          <p className="text-xs text-slate-500">Chargement de l’espace ImmoLuxe...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!authToken) {
-    return (
-      <AdminAuthScreen
-        configured={authStatus.configured}
-        defaultUsername={authStatus.defaultUsername}
-        onAuthenticated={handleAuthenticated}
-      />
-    );
+    return <AdminAuthScreen onAuthenticated={handleAuthenticated} />;
   }
 
   return (
