@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import {
   INITIAL_AGENTS,
@@ -121,11 +123,63 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+export interface ApiRoutesOptions {
+  dataFilePath?: string;
+}
+
+interface PersistedStore {
+  properties: Property[];
+  transactions: Transaction[];
+  clients: Client[];
+  agents: Agent[];
+  settings: AgencySettings;
+}
+
 let propertiesStore: Property[] = structuredClone(INITIAL_PROPERTIES);
 let transactionsStore: Transaction[] = structuredClone(INITIAL_TRANSACTIONS);
 let clientsStore: Client[] = structuredClone(INITIAL_CLIENTS);
 let agentsStore: Agent[] = structuredClone(INITIAL_AGENTS);
 let settingsStore: AgencySettings = structuredClone(INITIAL_SETTINGS);
+let activeDataFilePath: string | null = null;
+
+function loadStoreFromDisk(filePath: string): void {
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<PersistedStore>;
+    if (Array.isArray(parsed.properties)) propertiesStore = parsed.properties;
+    if (Array.isArray(parsed.transactions)) transactionsStore = parsed.transactions;
+    if (Array.isArray(parsed.clients)) clientsStore = parsed.clients;
+    if (Array.isArray(parsed.agents)) agentsStore = parsed.agents;
+    if (parsed.settings && typeof parsed.settings === 'object') {
+      settingsStore = { ...INITIAL_SETTINGS, ...parsed.settings };
+    }
+  } catch {
+    // Keep initial dataset if local file cannot be read
+  }
+}
+
+function persistStore(): void {
+  if (!activeDataFilePath) return;
+  try {
+    const dir = path.dirname(activeDataFilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const payload: PersistedStore = {
+      properties: propertiesStore,
+      transactions: transactionsStore,
+      clients: clientsStore,
+      agents: agentsStore,
+      settings: settingsStore,
+    };
+    const tmpPath = `${activeDataFilePath}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+    fs.renameSync(tmpPath, activeDataFilePath);
+  } catch {
+    // Ignore disk write failure so active session continues smoothly
+  }
+}
 
 interface AuthedRequest extends Request {
   adminSession?: SessionPayload;
@@ -155,7 +209,11 @@ function isFinitePositive(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val) && val >= 0;
 }
 
-export function registerApiRoutes(app: express.Express): void {
+export function registerApiRoutes(app: express.Express, options?: ApiRoutesOptions): void {
+  if (options?.dataFilePath) {
+    activeDataFilePath = options.dataFilePath;
+    loadStoreFromDisk(options.dataFilePath);
+  }
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/auth/status', (_req: Request, res: Response) => {
@@ -269,6 +327,7 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     propertiesStore = [created, ...propertiesStore];
+    persistStore();
     res.status(201).json(created);
   });
 
@@ -314,6 +373,7 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     propertiesStore = propertiesStore.map((p) => (p.id === id ? updated : p));
+    persistStore();
     res.json(updated);
   });
 
@@ -331,12 +391,14 @@ export function registerApiRoutes(app: express.Express): void {
     }
     const updated: Property = { ...existing, status };
     propertiesStore = propertiesStore.map((p) => (p.id === id ? updated : p));
+    persistStore();
     res.json(updated);
   });
 
   app.delete('/api/properties/:id', requireAdmin, (req: AuthedRequest, res: Response) => {
     const id = req.params.id;
     propertiesStore = propertiesStore.filter((p) => p.id !== id);
+    persistStore();
     res.json({ ok: true });
   });
 
@@ -383,6 +445,7 @@ export function registerApiRoutes(app: express.Express): void {
         );
       }
     }
+    persistStore();
     res.status(201).json(created);
   });
 
@@ -421,6 +484,7 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     transactionsStore = transactionsStore.map((t) => (t.id === id ? updated : t));
+    persistStore();
     res.json(updated);
   });
 
@@ -438,12 +502,14 @@ export function registerApiRoutes(app: express.Express): void {
     }
     const updated: Transaction = { ...existing, status };
     transactionsStore = transactionsStore.map((t) => (t.id === id ? updated : t));
+    persistStore();
     res.json(updated);
   });
 
   app.delete('/api/transactions/:id', requireAdmin, (req: AuthedRequest, res: Response) => {
     const id = req.params.id;
     transactionsStore = transactionsStore.filter((t) => t.id !== id);
+    persistStore();
     res.json({ ok: true });
   });
 
@@ -475,6 +541,7 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     clientsStore = [created, ...clientsStore];
+    persistStore();
     res.status(201).json(created);
   });
 
@@ -512,12 +579,14 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     clientsStore = clientsStore.map((c) => (c.id === id ? updated : c));
+    persistStore();
     res.json(updated);
   });
 
   app.delete('/api/clients/:id', requireAdmin, (req: AuthedRequest, res: Response) => {
     const id = req.params.id;
     clientsStore = clientsStore.filter((c) => c.id !== id);
+    persistStore();
     res.json({ ok: true });
   });
 
@@ -548,6 +617,7 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     agentsStore = [created, ...agentsStore];
+    persistStore();
     res.status(201).json(created);
   });
 
@@ -587,12 +657,14 @@ export function registerApiRoutes(app: express.Express): void {
     };
 
     agentsStore = agentsStore.map((a) => (a.id === id ? updated : a));
+    persistStore();
     res.json(updated);
   });
 
   app.delete('/api/agents/:id', requireAdmin, (req: AuthedRequest, res: Response) => {
     const id = req.params.id;
     agentsStore = agentsStore.filter((a) => a.id !== id);
+    persistStore();
     res.json({ ok: true });
   });
 
@@ -638,6 +710,7 @@ export function registerApiRoutes(app: express.Express): void {
           ? body.notifyWeeklyDigest
           : settingsStore.notifyWeeklyDigest,
     };
+    persistStore();
     res.json(settingsStore);
   });
 
@@ -646,6 +719,7 @@ export function registerApiRoutes(app: express.Express): void {
     transactionsStore = [];
     clientsStore = [];
     agentsStore = [];
+    persistStore();
     res.json({ ok: true });
   });
 
@@ -654,6 +728,7 @@ export function registerApiRoutes(app: express.Express): void {
     transactionsStore = structuredClone(INITIAL_TRANSACTIONS);
     clientsStore = structuredClone(INITIAL_CLIENTS);
     agentsStore = structuredClone(INITIAL_AGENTS);
+    persistStore();
     res.json({
       properties: propertiesStore,
       transactions: transactionsStore,
